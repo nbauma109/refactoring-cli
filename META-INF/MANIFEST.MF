@@ -1,0 +1,19 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Refactoring CLI
+Bundle-SymbolicName: io.github.nbauma109.refactoring.cli;singleton:=true
+Bundle-Version: 1.0.0
+Bundle-Activator: io.github.nbauma109.refactoring.cli.Activator
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Automatic-Module-Name: io.github.nbauma109.refactoring.cli
+Bundle-ActivationPolicy: lazy
+Require-Bundle: 
+ org.eclipse.core.runtime,
+ org.eclipse.core.resources,
+ org.eclipse.jdt.core,
+ org.eclipse.jdt.ui,
+ org.eclipse.jdt.core.manipulation,
+ org.eclipse.ltk.core.refactoring,
+ org.eclipse.text,
+ org.eclipse.jface,
+ org.eclipse.equinox.app

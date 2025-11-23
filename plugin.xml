@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin>
+  <extension id="app" point="org.eclipse.core.runtime.applications">
+    <application>
+      <run class="io.github.nbauma109.refactoring.cli.HeadlessCleanupApp"/>
+    </application>
+  </extension>
+</plugin>

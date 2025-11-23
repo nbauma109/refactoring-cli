@@ -11,8 +11,6 @@ import javax.xml.parsers.*;
 import org.eclipse.core.resources.*;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
-import org.eclipse.core.runtime.NullProgressMonitor;
-import org.eclipse.core.runtime.ProgressMonitorWrapper;
 import org.eclipse.jdt.core.*;
 import org.eclipse.jdt.core.dom.*;
 import org.eclipse.jdt.internal.corext.fix.*;
@@ -407,27 +405,5 @@ public class CleanupRunner {
 		    }
 		}
         return result;
-    }
-
-    private static class LoggingMonitor extends ProgressMonitorWrapper {
-
-        public LoggingMonitor() {
-            super(new NullProgressMonitor());
-        }
-
-        @Override
-        public void beginTask(String name, int totalWork) {
-            System.out.println("BEGIN: " + name + " (" + totalWork + ")");
-        }
-
-        @Override
-        public void worked(int work) {
-            System.out.print(".");
-        }
-
-        @Override
-        public void done() {
-            System.out.println("DONE");
-        }
     }
 }

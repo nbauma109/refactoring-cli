@@ -9,7 +9,6 @@ class LoggingMonitor extends ProgressMonitorWrapper {
     private int completedWork;
     private static final int BAR_WIDTH = 40;
     private boolean hasShownIntermediate;
-    private boolean hasPrintedFinal;
 
     public LoggingMonitor() {
         super(new NullProgressMonitor());
@@ -20,7 +19,7 @@ class LoggingMonitor extends ProgressMonitorWrapper {
         this.totalWork = totalWork;
         this.completedWork = 0;
         this.hasShownIntermediate = false;
-        this.hasPrintedFinal = false;
+        System.out.println();
         System.out.println("BEGIN: " + name + " (" + totalWork + ")");
     }
 
@@ -37,9 +36,8 @@ class LoggingMonitor extends ProgressMonitorWrapper {
     public void done() {
         this.completedWork = this.totalWork;
         renderProgressBar();
-        if (this.hasShownIntermediate && !this.hasPrintedFinal) {
+        if (this.hasShownIntermediate) {
             System.out.println();
-            this.hasPrintedFinal = true;
         }
         System.out.println("DONE");
     }
@@ -77,9 +75,8 @@ class LoggingMonitor extends ProgressMonitorWrapper {
 
         System.out.print(bar.toString());
 
-        if (percent == 100 && !this.hasPrintedFinal) {
+        if (percent == 100) {
             System.out.println();
-            this.hasPrintedFinal = true;
         }
     }
 }

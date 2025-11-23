@@ -1,25 +1,67 @@
 package io.github.nbauma109.refactoring.cli;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import javax.xml.parsers.*;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 
-import org.eclipse.core.resources.*;
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IFolder;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IProjectDescription;
+import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.IWorkspace;
+import org.eclipse.core.resources.IWorkspaceRoot;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
-import org.eclipse.jdt.core.*;
-import org.eclipse.jdt.core.dom.*;
-import org.eclipse.jdt.internal.corext.fix.*;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.jdt.core.IClasspathEntry;
+import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IJavaElement;
+import org.eclipse.jdt.core.IJavaProject;
+import org.eclipse.jdt.core.IPackageFragment;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
+import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.manipulation.OrganizeImportsOperation;
+import org.eclipse.jdt.core.search.TypeNameMatch;
+import org.eclipse.jdt.internal.corext.codemanipulation.CodeGenerationSettings;
+import org.eclipse.jdt.internal.corext.fix.CleanUpRefactoring;
+import org.eclipse.jdt.internal.corext.fix.CleanUpRegistry;
 import org.eclipse.jdt.internal.ui.JavaPlugin;
+import org.eclipse.jdt.internal.ui.fix.ImportsCleanUp;
 import org.eclipse.jdt.internal.ui.fix.MapCleanUpOptions;
+import org.eclipse.jdt.internal.ui.preferences.JavaPreferencesSettings;
 import org.eclipse.jdt.ui.cleanup.ICleanUp;
-import org.eclipse.ltk.core.refactoring.*;
+import org.eclipse.ltk.core.refactoring.Change;
+import org.eclipse.ltk.core.refactoring.CompositeChange;
+import org.eclipse.ltk.core.refactoring.RefactoringStatus;
+import org.eclipse.ltk.core.refactoring.TextFileChange;
+import org.eclipse.text.edits.MultiTextEdit;
 import org.eclipse.text.edits.TextEdit;
-import org.w3c.dom.*;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 public class CleanupRunner {
 
@@ -108,6 +150,16 @@ public class CleanupRunner {
             System.out.println("=== Running cleanup: " + cleanUp.getClass().getSimpleName() + " ===");
 
             for (ICompilationUnit unit : units) {
+
+                if (cleanUp.getClass() == ImportsCleanUp.class) {
+	            	if (cleanupSettings.getOrDefault("cleanup.organize_imports", "false").equals("true")) {
+	            	    boolean modified = applyOrganizeImports(unit, monitor);
+	            	    if (modified) {
+	            	        System.out.println("[organize-imports] " + unit.getElementName());
+	            	    }
+	            	}
+	            	continue;
+                }
 
                 System.out.println("Preparing refactoring for unit " + unit.getPath());
 
@@ -405,5 +457,35 @@ public class CleanupRunner {
 		    }
 		}
         return result;
+    }
+
+    private boolean applyOrganizeImports(ICompilationUnit unit, IProgressMonitor monitor) throws Exception {
+        ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        parser.setSource(unit);
+        parser.setResolveBindings(true);
+
+        CompilationUnit ast = (CompilationUnit) parser.createAST(monitor);
+
+        CodeGenerationSettings settings = JavaPreferencesSettings.getCodeGenerationSettings(unit.getJavaProject());
+
+        OrganizeImportsOperation op = new OrganizeImportsOperation(
+                unit,
+                ast,
+                settings.importIgnoreLowercase,
+                false,
+                false,
+                (openChoices, ranges) -> new TypeNameMatch[0] // no UI queries
+        );
+
+        TextEdit edit = op.createTextEdit(monitor);
+
+        if (edit == null || (edit instanceof MultiTextEdit && edit.getChildrenSize() == 0)) {
+            return false;
+        }
+
+        unit.applyTextEdit(edit, monitor);
+        unit.save(monitor, true);
+        return true;
     }
 }

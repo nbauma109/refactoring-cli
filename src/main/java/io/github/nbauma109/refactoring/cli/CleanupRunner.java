@@ -103,66 +103,80 @@ public class CleanupRunner {
             cleanUp.setOptions(options);
         }
 
-        System.out.println("Preparing refactoring...");
-        CleanUpRefactoring refactoring = new CleanUpRefactoring();
-
-        for (ICompilationUnit unit : units) {
-            refactoring.addCompilationUnit(unit);
-        }
+        List<Path> changed = new ArrayList<>();
 
         for (ICleanUp cleanUp : cleanUps) {
-            refactoring.addCleanUp(cleanUp);
+
+            System.out.println("=== Running cleanup: " + cleanUp.getClass().getSimpleName() + " ===");
+
+            for (ICompilationUnit unit : units) {
+
+                System.out.println("Preparing refactoring for unit " + unit.getPath());
+
+                CleanUpRefactoring refactoring = new CleanUpRefactoring();
+                refactoring.addCompilationUnit(unit);
+                refactoring.addCleanUp(cleanUp);
+
+                System.out.println("Checking initial conditions...");
+                RefactoringStatus initStatus = refactoring.checkInitialConditions(monitor);
+                System.out.println("Initial condition status: " + initStatus);
+
+                if (initStatus.hasFatalError()) {
+                    continue;
+                }
+
+                System.out.println("Checking final conditions...");
+                RefactoringStatus finalStatus = refactoring.checkFinalConditions(monitor);
+                System.out.println("Final condition status: " + finalStatus);
+
+                if (finalStatus.hasFatalError()) {
+                    continue;
+                }
+
+                System.out.println("Creating change...");
+                Change change = refactoring.createChange(monitor);
+                if (change == null) {
+                    continue;
+                }
+
+                System.out.println("Collecting changed files...");
+                List<Path> changedFiles = collectChangedFiles(change);
+                if (changedFiles.isEmpty()) {
+                    continue;
+                }
+
+                System.out.println("Initializing change...");
+                change.initializeValidationData(monitor);
+
+                System.out.println("Validating change...");
+                RefactoringStatus status = change.isValid(monitor);
+                System.out.println("Validation result: " + status);
+                if (status.hasFatalError()) {
+                    System.err.println("Change validation failed.");
+                    continue;
+                }
+
+                System.out.println("Applying change to " + unit.getElementName());
+
+                change.perform(monitor);
+
+                project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
+
+                for (Path p : changedFiles) {
+                    if (!changed.contains(p)) {
+                        changed.add(p);
+                    }
+                }
+
+                if (!changedFiles.isEmpty()) {
+                    javaProject.getJavaModel().refreshExternalArchives(
+                            new IJavaElement[] { javaProject },
+                            monitor
+                    );
+                }
+            }
         }
 
-        System.out.println("Checking initial conditions...");
-        RefactoringStatus initStatus = refactoring.checkInitialConditions(monitor);
-        System.out.println("Initial condition status: " + initStatus);
-
-        if (initStatus.hasFatalError()) {
-            System.err.println("Fatal error during initial conditions.");
-            return new ArrayList<>();
-        }
-
-        System.out.println("Checking final conditions...");
-        RefactoringStatus finalStatus = refactoring.checkFinalConditions(monitor);
-        System.out.println("Final condition status: " + finalStatus);
-
-        if (finalStatus.hasFatalError()) {
-            System.err.println("Fatal error during final conditions.");
-            return new ArrayList<>();
-        }
-
-        System.out.println("Creating change...");
-        Change change = refactoring.createChange(monitor);
-        if (change == null) {
-            System.out.println("No changes generated.");
-            return new ArrayList<>();
-        }
-
-        System.out.println("Collecting changed files...");
-        List<Path> changed = collectChangedFiles(change);
-        System.out.println("Pending changes: " + changed.size());
-
-        for (Path p : changed) {
-            System.out.println("Will modify: " + p);
-        }
-
-        System.out.println("Initializing change...");
-        change.initializeValidationData(monitor);
-
-        System.out.println("Validating change...");
-        RefactoringStatus status = change.isValid(monitor);
-        System.out.println("Validation result: " + status);
-
-        if (status.hasFatalError()) {
-            System.err.println("Change validation failed.");
-            return changed;
-        }
-
-        System.out.println("Applying change...");
-        change.perform(monitor);
-
-        System.out.println("Saving workspace...");
         ResourcesPlugin.getWorkspace().save(true, monitor);
 
         System.out.println("=== Cleanup complete ===");
@@ -360,7 +374,7 @@ public class CleanupRunner {
                 for (int i = 0; i < nodes.getLength(); i++) {
                     Node node = nodes.item(i);
                     if (node.getNodeType() == Node.ELEMENT_NODE) {
-                        Element element = (org.w3c.dom.Element) node;
+                        Element element = (Element) node;
 
                         String id = element.getAttribute("id");
                         String value = element.getAttribute("value");
@@ -377,7 +391,6 @@ public class CleanupRunner {
 
         return settings;
     }
-
 
     private List<Path> collectChangedFiles(Change change) throws CoreException {
         List<Path> result = new ArrayList<>();
@@ -396,7 +409,6 @@ public class CleanupRunner {
         return result;
     }
 
-
     private static class LoggingMonitor extends ProgressMonitorWrapper {
 
         public LoggingMonitor() {
@@ -410,7 +422,7 @@ public class CleanupRunner {
 
         @Override
         public void worked(int work) {
-            System.out.println("WORK: " + work);
+            System.out.print(".");
         }
 
         @Override
@@ -418,5 +430,4 @@ public class CleanupRunner {
             System.out.println("DONE");
         }
     }
-
 }

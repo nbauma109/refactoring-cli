@@ -1,8 +1,8 @@
 This is a command line interface (CLI) to execute Eclipse Source Clean-Ups  (equivalent of right-click menu `Source -> Clean Up`).
 
 Quick start :
-  * Build with `mvn package`
-  * Copy the generated jar to `dropins` folder of Eclipse
+  * Build with `mvn package` or download from releases
+  * Copy `io.github.nbauma109.refactoring.cli-x.y.z.jar` to `dropins` folder of Eclipse
   * In Eclipse, export a profile file from `Window -> Preferences` and then `Java -> Code Style -> Clean Up` and save it to `C:\path\to\source_cleanup_profile.xml`
   * Run `cmd` and execute command
 ```

@@ -9,7 +9,7 @@
 
   <groupId>io.github.nbauma109</groupId>
   <artifactId>io.github.nbauma109.refactoring.cli</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <packaging>eclipse-plugin</packaging>
 
   <properties>

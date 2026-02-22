@@ -3,6 +3,7 @@ package io.github.nbauma109.refactoring.cli;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
@@ -12,11 +13,14 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.jar.Manifest;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -30,7 +34,9 @@ import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IPath;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
@@ -39,8 +45,20 @@ import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTMatcher;
+import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.IfStatement;
+import org.eclipse.jdt.core.dom.InstanceofExpression;
+import org.eclipse.jdt.core.dom.ParenthesizedExpression;
+import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.Type;
+import org.eclipse.jdt.internal.corext.dom.ASTNodes;
 import org.eclipse.jdt.internal.corext.fix.CleanUpRefactoring;
 import org.eclipse.jdt.internal.corext.fix.CleanUpRegistry;
 import org.eclipse.jdt.internal.ui.JavaPlugin;
@@ -50,7 +68,9 @@ import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.ltk.core.refactoring.CompositeChange;
 import org.eclipse.ltk.core.refactoring.RefactoringStatus;
 import org.eclipse.ltk.core.refactoring.TextFileChange;
+import org.eclipse.text.edits.MultiTextEdit;
 import org.eclipse.text.edits.TextEdit;
+import org.osgi.framework.Bundle;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -84,9 +104,13 @@ public class CleanupRunner {
 
         System.out.println("Creating temporary workspace project...");
         IProject project = wsRoot.getProject("refactoring-cli-project");
-        if (!project.exists()) {
-            project.create(monitor);
+        if (project.exists()) {
+            if (project.isOpen()) {
+                project.close(monitor);
+            }
+            project.delete(true, true, monitor);
         }
+        project.create(monitor);
         project.open(monitor);
 
         addJavaNature(project);
@@ -108,7 +132,15 @@ public class CleanupRunner {
         System.out.println("Encoding set to UTF-8.");
 
         System.out.println("Configuring classpath...");
-        configureClasspath(javaProject, linkedFolders);
+        Set<String> requiredBundles = detectRequiredBundles(projectRoot);
+        Set<Path> manifestLibraries = detectManifestLibraries(projectRoot);
+        if (!requiredBundles.isEmpty()) {
+            System.out.println("Detected " + requiredBundles.size() + " required OSGi bundles from MANIFEST.MF.");
+        }
+        if (!manifestLibraries.isEmpty()) {
+            System.out.println("Detected " + manifestLibraries.size() + " local MANIFEST.MF library entries.");
+        }
+        configureClasspath(javaProject, linkedFolders, requiredBundles, manifestLibraries);
 
         System.out.println("Configuring compiler options...");
         configureCompilerOptions(javaProject);
@@ -132,14 +164,20 @@ public class CleanupRunner {
         System.out.println("Loaded " + cleanUps.length + " cleanup modules.");
 
         MapCleanUpOptions options = new MapCleanUpOptions(cleanupSettings);
+        List<ICleanUp> enabledCleanUps = new ArrayList<>();
 
         for (ICleanUp cleanUp : cleanUps) {
             cleanUp.setOptions(options);
+            String[] steps = cleanUp.getStepDescriptions();
+            if (steps != null && steps.length > 0) {
+                enabledCleanUps.add(cleanUp);
+            }
         }
+        System.out.println("Enabled " + enabledCleanUps.size() + " cleanup modules from profile.");
 
         List<Path> changed = new ArrayList<>();
 
-        for (ICleanUp cleanUp : cleanUps) {
+        for (ICleanUp cleanUp : enabledCleanUps) {
 
             System.out.println("=== Running cleanup: " + cleanUp.getClass().getSimpleName() + " ===");
 
@@ -173,12 +211,6 @@ public class CleanupRunner {
                     continue;
                 }
 
-                System.out.println("Collecting changed files...");
-                List<Path> changedFiles = collectChangedFiles(change);
-                if (changedFiles.isEmpty()) {
-                    continue;
-                }
-
                 System.out.println("Initializing change...");
                 change.initializeValidationData(monitor);
 
@@ -189,6 +221,9 @@ public class CleanupRunner {
                     System.err.println("Change validation failed.");
                     continue;
                 }
+
+                System.out.println("Collecting changed files...");
+                List<Path> changedFiles = collectChangedFiles(change);
 
                 System.out.println("Applying change to " + unit.getElementName());
 
@@ -207,6 +242,16 @@ public class CleanupRunner {
                             new IJavaElement[] { javaProject },
                             monitor
                     );
+                }
+            }
+        }
+
+        if (isOptionEnabled(cleanupSettings, "cleanup.instanceof")) {
+            System.out.println("Running fallback transformation for cleanup.instanceof...");
+            for (ICompilationUnit unit : units) {
+                Path fallbackChanged = applyInstanceofPatternFallback(unit, monitor);
+                if (fallbackChanged != null && !changed.contains(fallbackChanged)) {
+                    changed.add(fallbackChanged);
                 }
             }
         }
@@ -344,8 +389,11 @@ public class CleanupRunner {
         return links;
     }
 
-    private void configureClasspath(IJavaProject javaProject, Map<IPath, IFolder> linkedFolders) throws CoreException {
+    private void configureClasspath(IJavaProject javaProject, Map<IPath, IFolder> linkedFolders, Set<String> requiredBundles,
+            Set<Path> manifestLibraries)
+            throws CoreException {
         List<IClasspathEntry> entries = new ArrayList<>();
+        Set<String> seenLibraryPaths = new HashSet<>();
 
         for (IFolder folder : linkedFolders.values()) {
             entries.add(JavaCore.newSourceEntry(folder.getFullPath()));
@@ -354,12 +402,214 @@ public class CleanupRunner {
         entries.add(JavaCore.newContainerEntry(
                 new org.eclipse.core.runtime.Path("org.eclipse.jdt.launching.JRE_CONTAINER")));
 
+        for (Path lib : manifestLibraries) {
+            String normalized = lib.normalize().toString();
+            if (seenLibraryPaths.add(normalized)) {
+                org.eclipse.core.runtime.Path path = new org.eclipse.core.runtime.Path(normalized);
+                entries.add(JavaCore.newLibraryEntry(path, null, null));
+            }
+        }
+
+        for (String bundleId : requiredBundles) {
+            Path bundlePath = resolveBundlePath(bundleId);
+            if (bundlePath == null) {
+                continue;
+            }
+
+            String normalized = bundlePath.normalize().toString();
+            if (seenLibraryPaths.add(normalized)) {
+                org.eclipse.core.runtime.Path path = new org.eclipse.core.runtime.Path(normalized);
+                entries.add(JavaCore.newLibraryEntry(path, null, null));
+            }
+        }
+
         for (String cp : extraClasspath) {
             org.eclipse.core.runtime.Path path = new org.eclipse.core.runtime.Path(cp);
-            entries.add(JavaCore.newLibraryEntry(path, null, null));
+            if (seenLibraryPaths.add(path.toOSString())) {
+                entries.add(JavaCore.newLibraryEntry(path, null, null));
+            }
         }
 
         javaProject.setRawClasspath(entries.toArray(new IClasspathEntry[0]), null);
+    }
+
+    private Set<String> detectRequiredBundles(Path root) throws IOException {
+        Set<String> result = new LinkedHashSet<>();
+
+        Files.walkFileTree(root, new FileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (!"MANIFEST.MF".equals(file.getFileName().toString())) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                Path parent = file.getParent();
+                if (parent == null || parent.getFileName() == null || !"META-INF".equals(parent.getFileName().toString())) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                try (InputStream in = Files.newInputStream(file)) {
+                    Manifest manifest = new Manifest(in);
+                    String requireBundleHeader = manifest.getMainAttributes().getValue("Require-Bundle");
+                    if (requireBundleHeader == null || requireBundleHeader.isBlank()) {
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    List<String> clauses = splitManifestHeaderClauses(requireBundleHeader);
+                    for (String clause : clauses) {
+                        int semicolon = clause.indexOf(';');
+                        String bundleId = semicolon >= 0 ? clause.substring(0, semicolon).trim() : clause.trim();
+                        if (!bundleId.isEmpty()) {
+                            result.add(bundleId);
+                        }
+                    }
+                }
+
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                throw new UncheckedIOException(exc);
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                if (exc != null) {
+                    throw new UncheckedIOException(exc);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+
+        return result;
+    }
+
+    private Set<Path> detectManifestLibraries(Path root) throws IOException {
+        Set<Path> result = new LinkedHashSet<>();
+
+        Files.walkFileTree(root, new FileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (!"MANIFEST.MF".equals(file.getFileName().toString())) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                Path parent = file.getParent();
+                if (parent == null || parent.getFileName() == null || !"META-INF".equals(parent.getFileName().toString())) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                Path bundleRoot = parent.getParent();
+                if (bundleRoot == null) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                try (InputStream in = Files.newInputStream(file)) {
+                    Manifest manifest = new Manifest(in);
+                    String bundleClassPath = manifest.getMainAttributes().getValue("Bundle-ClassPath");
+                    if (bundleClassPath == null || bundleClassPath.isBlank()) {
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    List<String> clauses = splitManifestHeaderClauses(bundleClassPath);
+                    for (String clause : clauses) {
+                        String entry = clause.trim();
+                        if (entry.isEmpty() || ".".equals(entry)) {
+                            continue;
+                        }
+
+                        Path resolved = bundleRoot.resolve(entry).normalize();
+                        if (Files.exists(resolved)) {
+                            result.add(resolved);
+                        }
+                    }
+                }
+
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                throw new UncheckedIOException(exc);
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                if (exc != null) {
+                    throw new UncheckedIOException(exc);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+
+        return result;
+    }
+
+    private List<String> splitManifestHeaderClauses(String header) {
+        List<String> clauses = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuote = false;
+
+        for (int i = 0; i < header.length(); i++) {
+            char c = header.charAt(i);
+            if (c == '"') {
+                inQuote = !inQuote;
+                current.append(c);
+                continue;
+            }
+
+            if (c == ',' && !inQuote) {
+                String clause = current.toString().trim();
+                if (!clause.isEmpty()) {
+                    clauses.add(clause);
+                }
+                current.setLength(0);
+                continue;
+            }
+
+            current.append(c);
+        }
+
+        String tail = current.toString().trim();
+        if (!tail.isEmpty()) {
+            clauses.add(tail);
+        }
+
+        return clauses;
+    }
+
+    private Path resolveBundlePath(String bundleId) {
+        try {
+            Bundle bundle = Platform.getBundle(bundleId);
+            if (bundle == null) {
+                System.out.println("Could not resolve required bundle on running platform: " + bundleId);
+                return null;
+            }
+
+            java.net.URL root = bundle.getEntry("/");
+            if (root == null) {
+                System.out.println("Bundle has no root entry: " + bundleId);
+                return null;
+            }
+
+            java.net.URL localUrl = FileLocator.toFileURL(root);
+            URI uri = localUrl.toURI();
+            return Paths.get(uri);
+        } catch (Exception e) {
+            System.out.println("Failed to resolve required bundle path for " + bundleId + ": " + e.getMessage());
+            return null;
+        }
     }
 
     private void configureCompilerOptions(IJavaProject javaProject) {
@@ -368,6 +618,11 @@ public class CleanupRunner {
         options.put(JavaCore.COMPILER_COMPLIANCE, sourceLevel);
         options.put(JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM, sourceLevel);
         javaProject.setOptions(options);
+    }
+
+    private boolean isOptionEnabled(Map<String, String> cleanupSettings, String key) {
+        String value = cleanupSettings.get(key);
+        return value != null && Boolean.parseBoolean(value);
     }
 
     private void setEncoding(IProject project) throws CoreException {
@@ -434,13 +689,261 @@ public class CleanupRunner {
                 result.addAll(collectChangedFiles(child));
             }
         } else if (change instanceof TextFileChange tfc) {
-		    TextEdit edit = tfc.getEdit();
-		    if (edit != null && edit.hasChildren()) {
-		        IFile file = tfc.getFile();
-		        result.add(Paths.get(file.getLocation().toOSString()));
-		    }
-		}
+            TextEdit edit = tfc.getEdit();
+            if (hasEffectiveEdits(edit)) {
+                IFile file = tfc.getFile();
+                if (file != null && file.getLocation() != null) {
+                    result.add(Paths.get(file.getLocation().toOSString()));
+                }
+            }
+        }
         return result;
+    }
+
+    private Path applyInstanceofPatternFallback(ICompilationUnit unit, LoggingMonitor monitor) {
+        try {
+            ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+            parser.setKind(ASTParser.K_COMPILATION_UNIT);
+            parser.setResolveBindings(true);
+            parser.setBindingsRecovery(true);
+            parser.setSource(unit);
+
+            CompilationUnit root = (CompilationUnit) parser.createAST(null);
+            List<InstanceofPatternCandidate> candidates = collectInstanceofPatternCandidates(root);
+
+            if (candidates.isEmpty()) {
+                return null;
+            }
+
+            String source = unit.getSource();
+            String updated = applyInstanceofPatternReplacements(source, candidates);
+
+            if (updated.equals(source)) {
+                return null;
+            }
+
+            unit.getBuffer().setContents(updated);
+            unit.save(monitor, true);
+
+            IResource resource = unit.getResource();
+            if (resource instanceof IFile file && file.getLocation() != null) {
+                return Paths.get(file.getLocation().toOSString());
+            }
+        } catch (CoreException e) {
+            System.err.println("Fallback cleanup.instanceof failed for " + unit.getPath() + ": " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    private List<InstanceofPatternCandidate> collectInstanceofPatternCandidates(CompilationUnit root) {
+        List<InstanceofPatternCandidate> candidates = new ArrayList<>();
+
+        root.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(IfStatement ifStatement) {
+                Expression condition = ifStatement.getExpression();
+                if (!(condition instanceof InstanceofExpression instanceofExpression)) {
+                    return true;
+                }
+
+                Type matchedType = instanceofExpression.getRightOperand();
+                if (matchedType == null || matchedType.resolveBinding() == null) {
+                    return true;
+                }
+
+                Expression leftOperand = instanceofExpression.getLeftOperand();
+                if (!ASTNodes.isPassive(leftOperand)) {
+                    return true;
+                }
+
+                if (!(ifStatement.getThenStatement() instanceof Block thenBlock)) {
+                    return true;
+                }
+
+                List<CastExpression> casts = findMatchingCasts(thenBlock, leftOperand, matchedType);
+                if (casts.isEmpty()) {
+                    return true;
+                }
+
+                String variableName = buildUniquePatternName(thenBlock, matchedType);
+                if (variableName == null || variableName.isBlank()) {
+                    return true;
+                }
+
+                candidates.add(new InstanceofPatternCandidate(instanceofExpression, casts, variableName));
+                return true;
+            }
+        });
+
+        return candidates;
+    }
+
+    private List<CastExpression> findMatchingCasts(Block thenBlock, Expression leftOperand, Type matchedType) {
+        List<CastExpression> matches = new ArrayList<>();
+        ASTMatcher matcher = new ASTMatcher();
+
+        thenBlock.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(CastExpression castExpression) {
+                Type castType = castExpression.getType();
+                if (castType == null || castType.resolveBinding() == null) {
+                    return true;
+                }
+
+                if (!Objects.equals(matchedType.resolveBinding(), castType.resolveBinding())) {
+                    return true;
+                }
+
+                if (!leftOperand.subtreeMatch(matcher, castExpression.getExpression())) {
+                    return true;
+                }
+
+                matches.add(castExpression);
+                return true;
+            }
+        });
+
+        return matches;
+    }
+
+    private String buildUniquePatternName(Block scope, Type type) {
+        String typeName = type.resolveBinding() != null ? type.resolveBinding().getName() : type.toString();
+        String base = toLowerCamelIdentifier(typeName);
+        if (base == null || base.isBlank()) {
+            base = "value";
+        }
+
+        Set<String> usedNames = new HashSet<>();
+        scope.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(SimpleName node) {
+                usedNames.add(node.getIdentifier());
+                return true;
+            }
+        });
+
+        if (!usedNames.contains(base)) {
+            return base;
+        }
+
+        int suffix = 2;
+        while (usedNames.contains(base + suffix)) {
+            suffix = suffix + 1;
+        }
+        return base + suffix;
+    }
+
+    private String toLowerCamelIdentifier(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+
+        StringBuilder cleaned = new StringBuilder();
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (Character.isLetterOrDigit(c) || c == '_') {
+                cleaned.append(c);
+            }
+        }
+
+        if (cleaned.length() == 0) {
+            return null;
+        }
+
+        char first = cleaned.charAt(0);
+        if (!Character.isJavaIdentifierStart(first)) {
+            cleaned.insert(0, 'v');
+        }
+
+        String base = cleaned.toString();
+        return Character.toLowerCase(base.charAt(0)) + base.substring(1);
+    }
+
+    private String applyInstanceofPatternReplacements(String source, List<InstanceofPatternCandidate> candidates) {
+        List<TextReplacement> replacements = new ArrayList<>();
+
+        for (InstanceofPatternCandidate candidate : candidates) {
+            InstanceofExpression instanceOf = candidate.instanceofExpression();
+            Expression left = instanceOf.getLeftOperand();
+            Type right = instanceOf.getRightOperand();
+
+            int leftStart = left.getStartPosition();
+            int leftEnd = leftStart + left.getLength();
+            int rightStart = right.getStartPosition();
+            int rightEnd = rightStart + right.getLength();
+
+            String leftText = source.substring(leftStart, leftEnd);
+            String rightText = source.substring(rightStart, rightEnd);
+            String conditionReplacement = leftText + " instanceof " + rightText + " " + candidate.variableName();
+
+            replacements.add(new TextReplacement(
+                    instanceOf.getStartPosition(),
+                    instanceOf.getLength(),
+                    conditionReplacement
+            ));
+
+            for (CastExpression castExpression : candidate.castExpressions()) {
+                ASTNode replacementTarget = castExpression;
+                if (castExpression.getParent() instanceof ParenthesizedExpression parenthesized
+                        && parenthesized.getExpression() == castExpression) {
+                    replacementTarget = parenthesized;
+                }
+
+                replacements.add(new TextReplacement(
+                        replacementTarget.getStartPosition(),
+                        replacementTarget.getLength(),
+                        candidate.variableName()
+                ));
+            }
+        }
+
+        replacements.sort((a, b) -> Integer.compare(b.start(), a.start()));
+
+        StringBuilder builder = new StringBuilder(source);
+        int lastStart = Integer.MAX_VALUE;
+        for (TextReplacement replacement : replacements) {
+            if (replacement.start() + replacement.length() > lastStart) {
+                continue;
+            }
+            builder.replace(
+                    replacement.start(),
+                    replacement.start() + replacement.length(),
+                    replacement.text()
+            );
+            lastStart = replacement.start();
+        }
+
+        return builder.toString();
+    }
+
+    private record InstanceofPatternCandidate(
+            InstanceofExpression instanceofExpression,
+            List<CastExpression> castExpressions,
+            String variableName
+    ) {
+    }
+
+    private record TextReplacement(int start, int length, String text) {
+    }
+
+    private boolean hasEffectiveEdits(TextEdit edit) {
+        if (edit == null) {
+            return false;
+        }
+
+        if (!edit.hasChildren()) {
+            return !(edit instanceof MultiTextEdit);
+        }
+
+        TextEdit[] children = edit.getChildren();
+        for (TextEdit child : children) {
+            if (hasEffectiveEdits(child)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }

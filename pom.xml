@@ -14,7 +14,7 @@
 
   <properties>
     <tycho.version>5.0.0</tycho.version>
-    <eclipse.release.repo>https://download.eclipse.org/releases/2025-09</eclipse.release.repo>
+    <eclipse.release.repo>https://download.eclipse.org/releases/2026-09</eclipse.release.repo>
 
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>

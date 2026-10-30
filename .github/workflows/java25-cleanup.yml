@@ -46,7 +46,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/eclipse/dropins"
           cp "$plugin" "$RUNNER_TEMP/eclipse/dropins/"
 
-      - name: Refactor Java 25 flexible constructor body
+      - name: Refactor Java 25 module imports
         env:
           ECLIPSE_HOME: ${{ runner.temp }}/eclipse
         run: bash tests/java25/test-cleanup.sh

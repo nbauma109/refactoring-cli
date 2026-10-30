@@ -13,11 +13,11 @@
   <packaging>eclipse-plugin</packaging>
 
   <properties>
-    <tycho.version>5.0.0</tycho.version>
+    <tycho.version>5.0.4</tycho.version>
     <eclipse.release.repo>https://download.eclipse.org/releases/2026-09</eclipse.release.repo>
 
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
+    <maven.compiler.source>25</maven.compiler.source>
+    <maven.compiler.target>25</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 

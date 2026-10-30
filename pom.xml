@@ -16,8 +16,7 @@
     <tycho.version>5.0.4</tycho.version>
     <eclipse.release.repo>https://download.eclipse.org/releases/2026-09</eclipse.release.repo>
 
-    <maven.compiler.source>25</maven.compiler.source>
-    <maven.compiler.target>25</maven.compiler.target>
+    <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 

@@ -25,6 +25,9 @@ public final class CleanupReport {
     private CleanupReport() {
     }
 
+    private record EditDiagnostic(TextEdit edit, Diagnostic diagnostic) {
+    }
+
     public record Diagnostic(String file, int line, int column, String cleanup, String module,
             String message, int startOffset, int endOffset) {
     }
@@ -55,13 +58,15 @@ public final class CleanupReport {
         }
         String source = Files.readString(path, StandardCharsets.UTF_8);
         String relative = project.relativize(path).toString().replace('\\', '/');
-        collectLeaves(edit, change.getTextEditChangeGroups(), source, relative,
-                attribution, module, message, diagnostics);
+        List<EditDiagnostic> changes = new ArrayList<>();
+        TextEditChangeGroup[] groups = change.getTextEditChangeGroups();
+        collectLeaves(edit, groups, source, relative, attribution, module, message, changes);
+        collectOpportunities(changes, groups, diagnostics);
     }
 
     private static void collectLeaves(TextEdit edit, TextEditChangeGroup[] groups, String source,
             String file, CleanupAttribution.Selection attribution, String module, String message,
-            List<Diagnostic> diagnostics) throws IOException {
+            List<EditDiagnostic> diagnostics) throws IOException {
         if (edit.hasChildren()) {
             for (TextEdit child : edit.getChildren()) {
                 collectLeaves(child, groups, source, file, attribution, module, message, diagnostics);
@@ -77,10 +82,72 @@ public final class CleanupReport {
             throw new IOException("Cleanup edit has an invalid source range in " + file);
         }
         int[] location = sourceLocation(source, offset);
-        diagnostics.add(new Diagnostic(file, location[0], location[1],
-                identifyOption(edit, groups, attribution), module, message, offset, offset + length));
+        Diagnostic issue = new Diagnostic(file, location[0], location[1],
+                identifyOption(edit, groups, attribution), module, message, offset, offset + length);
+        diagnostics.add(new EditDiagnostic(edit, issue));
     }
 
+
+
+    private static void collectOpportunities(List<EditDiagnostic> changes, TextEditChangeGroup[] groups,
+            List<Diagnostic> diagnostics) {
+        Set<TextEdit> grouped = new HashSet<>();
+        if (groups != null) {
+            for (TextEditChangeGroup group : groups) {
+                List<EditDiagnostic> members = new ArrayList<>();
+                for (EditDiagnostic change : changes) {
+                    if (!grouped.contains(change.edit()) && belongsToGroup(change.edit(), group)) {
+                        members.add(change);
+                    }
+                }
+                if (members.size() > 1 && sameCleanup(members)) {
+                    diagnostics.add(mergeEdits(members));
+                    for (EditDiagnostic member : members) {
+                        grouped.add(member.edit());
+                    }
+                }
+            }
+        }
+        for (EditDiagnostic change : changes) {
+            if (!grouped.contains(change.edit())) {
+                diagnostics.add(change.diagnostic());
+            }
+        }
+    }
+
+    private static boolean belongsToGroup(TextEdit edit, TextEditChangeGroup group) {
+        for (TextEdit groupedEdit : group.getTextEdits()) {
+            if (containsEdit(groupedEdit, edit)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean sameCleanup(List<EditDiagnostic> changes) {
+        Diagnostic first = changes.get(0).diagnostic();
+        for (EditDiagnostic change : changes) {
+            Diagnostic issue = change.diagnostic();
+            if (!first.cleanup().equals(issue.cleanup()) || !first.module().equals(issue.module())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Diagnostic mergeEdits(List<EditDiagnostic> changes) {
+        Diagnostic first = changes.get(0).diagnostic();
+        int lastOffset = first.endOffset();
+        for (EditDiagnostic change : changes) {
+            Diagnostic issue = change.diagnostic();
+            if (issue.startOffset() < first.startOffset()) {
+                first = issue;
+            }
+            lastOffset = Math.max(lastOffset, issue.endOffset());
+        }
+        return new Diagnostic(first.file(), first.line(), first.column(), first.cleanup(),
+                first.module(), first.message(), first.startOffset(), lastOffset);
+    }
 
     private static String identifyOption(TextEdit leaf, TextEditChangeGroup[] groups,
             CleanupAttribution.Selection attribution) {

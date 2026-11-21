@@ -135,6 +135,7 @@ issues = report["issues"]
 print(option, json.dumps(issues, indent=2))
 assert issues, "Expected real Eclipse cleanup output for " + option
 assert any(issue["cleanup"] == option for issue in issues), (option, issues)
+assert len(issues) == 1, f"One cleanup opportunity must produce one warning: {option}, {issues}"
 assert all(issue["file"] == "src/smoke/OverrideResourceCleanups.java" for issue in issues), issues
 PY
 done

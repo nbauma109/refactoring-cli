@@ -50,3 +50,8 @@ jobs:
         env:
           ECLIPSE_HOME: ${{ runner.temp }}/eclipse
         run: bash tests/java25/test-cleanup.sh
+
+      - name: Probe diverse complementary Eclipse cleanup options
+        env:
+          ECLIPSE_HOME: ${{ runner.temp }}/eclipse
+        run: bash tests/java25/test-complementary-candidates.sh

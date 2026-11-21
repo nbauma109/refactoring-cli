@@ -86,9 +86,6 @@ public class CleanupRunner {
     private final List<Path> sourceRoots;
 
     public CleanupRunner(Path projectRoot, Path profileFile, String sourceLevel, List<String> extraClasspath) {
-        this.projectRoot = projectRoot;
-        this.profileFile = profileFile;
-        this.sourceLevel = sourceLevel;
         this(projectRoot, profileFile, sourceLevel, extraClasspath, List.of());
     }
 

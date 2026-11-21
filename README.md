@@ -31,3 +31,20 @@ The external Java 25 and Eclipse installation remain necessary. The [static-anal
 The report-only analyzer also inspects Eclipse's named text-edit groups. When a group maps uniquely to a declared cleanup step and an enabled cleanup option, the individual edit is labeled with that exact option even if its module enables several cleanups. Unmatched or overlapping groups retain the module identifier. This is a conservative attribution mechanism rather than a guarantee that every Eclipse cleanup exposes edit-level categories.
 
 The diagnostic writer groups named text edits belonging to one Eclipse refactoring opportunity before serializing the report. For example, a try-with-resources conversion that moves the resource, inserts it in the try declaration, and removes a finally block is one warning, not a warning per text edit. The source range of that warning spans the original edits. Parent settings such as `cleanup.add_missing_annotations` must be enabled with their specific child options; the reporter attributes the resulting step to the specific option when it is unambiguous.
+
+## Broad complementary cleanup integration
+
+The Java 25 integration suite verifies nine diverse Eclipse cleanup options with real
+report-only transformations: assignment extraction, increment extraction, runtime and
+specification version property accessors, `String.isBlank()` modernization, redundant
+modifier removal, array initializer simplification, collection `addAll` conversion
+and indentation reduction. The existing module-import integration separately verifies
+the tenth new option. Every verified opportunity must have a concrete option identifier
+and leave source files unchanged.
+
+The broader [candidate test](tests/java25/test-complementary-candidates.sh) can also probe
+24 options (including known Sonar overlap candidates) by running
+`ECLIPSE_PROBE_ALL=true bash tests/java25/test-complementary-candidates.sh` with a
+compatible Eclipse runtime and `RUNNER_TEMP` set. CI runs only the verified option
+set by default. The resulting JSON summary lists exact identifiers and source lines,
+allowing us to evaluate future cleanup batches without enabling unverified rules.

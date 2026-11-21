@@ -61,12 +61,16 @@ final class CleanupAttribution {
     private static String resolveOption(Set<String> controllingOptions) {
         Set<String> specificOptions = new LinkedHashSet<>(controllingOptions);
         if (specificOptions.contains("cleanup.add_missing_annotations")) {
+            boolean hasSpecificOption = false;
             for (String option : specificOptions) {
                 if (option.startsWith("cleanup.add_missing_")
                         && !"cleanup.add_missing_annotations".equals(option)) {
-                    specificOptions.remove("cleanup.add_missing_annotations");
+                    hasSpecificOption = true;
                     break;
                 }
+            }
+            if (hasSpecificOption) {
+                specificOptions.remove("cleanup.add_missing_annotations");
             }
         }
         return specificOptions.size() == 1 ? specificOptions.iterator().next() : null;

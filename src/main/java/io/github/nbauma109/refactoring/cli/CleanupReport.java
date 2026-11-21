@@ -14,9 +14,7 @@ import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.ltk.core.refactoring.CompositeChange;
 import org.eclipse.ltk.core.refactoring.TextFileChange;
 import org.eclipse.ltk.core.refactoring.TextEditChangeGroup;
-import org.eclipse.text.edits.InsertEdit;
 import org.eclipse.text.edits.MultiTextEdit;
-import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
 
 /**
@@ -63,7 +61,7 @@ public final class CleanupReport {
         List<EditDiagnostic> changes = new ArrayList<>();
         TextEditChangeGroup[] groups = change.getTextEditChangeGroups();
         collectLeaves(edit, groups, source, relative, attribution, module, message, changes);
-        discardSupplementaryImportEdits(changes, source, module);
+        discardSupplementaryWhitespaceEdits(changes, source, module);
         collectOpportunities(changes, groups, diagnostics);
     }
 
@@ -92,44 +90,28 @@ public final class CleanupReport {
 
 
 
-    private static void discardSupplementaryImportEdits(List<EditDiagnostic> changes,
+    private static void discardSupplementaryWhitespaceEdits(List<EditDiagnostic> changes,
             String source, String module) {
         if (!"ConstantsForSystemPropertyCleanUpCore".equals(module) || changes.size() < 2) {
             return;
         }
         boolean hasSourceChange = false;
         for (EditDiagnostic candidate : changes) {
-            if (!isSupplementaryImportEdit(candidate.edit(), source)) {
+            if (!isSupplementaryWhitespaceEdit(candidate.edit(), source)) {
                 hasSourceChange = true;
                 break;
             }
         }
         if (hasSourceChange) {
-            changes.removeIf(candidate -> isSupplementaryImportEdit(candidate.edit(), source));
+            changes.removeIf(candidate -> isSupplementaryWhitespaceEdit(candidate.edit(), source));
         }
     }
 
-    private static boolean isSupplementaryImportEdit(TextEdit edit, String source) {
-        String replacement = null;
-        if (edit instanceof InsertEdit insertion) {
-            replacement = insertion.getText();
-        } else if (edit instanceof ReplaceEdit substitution) {
-            replacement = substitution.getText();
-        }
-        if (replacement == null || !replacement.contains("import ")) {
-            return false;
-        }
+    private static boolean isSupplementaryWhitespaceEdit(TextEdit edit, String source) {
         int start = edit.getOffset();
         int end = start + edit.getLength();
-        if (start < 0 || end > source.length() || !source.substring(start, end).isBlank()) {
-            return false;
-        }
-        for (String line : replacement.split("\\R")) {
-            if (line.stripLeading().startsWith("import ")) {
-                return true;
-            }
-        }
-        return false;
+        return start >= 0 && end <= source.length()
+                && source.substring(start, end).isBlank();
     }
 
     private static void collectOpportunities(List<EditDiagnostic> changes, TextEditChangeGroup[] groups,

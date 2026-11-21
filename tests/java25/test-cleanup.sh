@@ -19,12 +19,19 @@ mkdir -p "$RUNNER_TEMP/java25-original-classes"
 javac --release 25 -d "$RUNNER_TEMP/java25-original-classes" \
     "$source_dir/src/module-info.java" "$source_file"
 
-run_cleanup() {
+run_cleanup_with_profile() {
+    local active_profile="$1"
+    local active_root="$2"
+    shift 2
     xvfb-run -a "$ECLIPSE_HOME/eclipse" \
         -nosplash -clean -consoleLog \
         -data "$workspace" \
         -application io.github.nbauma109.refactoring.cli.app \
-        --source 25 --profile "$profile" "$source_dir" "$@"
+        --source 25 --profile "$active_profile" "$active_root" "$@"
+}
+
+run_cleanup() {
+    run_cleanup_with_profile "$profile" "$source_dir" "$@"
 }
 
 original="$RUNNER_TEMP/java25-original-source.java"
@@ -58,3 +65,39 @@ javac --release 25 -d "$RUNNER_TEMP/java25-refactored-classes" \
 run_cleanup
 diff -u "$expected" "$source_file"
 echo "Java 25 module imports cleanup passed and is idempotent"
+
+overlap_dir="$RUNNER_TEMP/java25-overlap-cleanups"
+overlap_file="$overlap_dir/src/smoke/OverlapCleanups.java"
+mkdir -p "$(dirname "$overlap_file")"
+cp "$root/tests/java25/src/smoke/OverlapCleanups.java" "$overlap_file"
+cp "$overlap_file" "$RUNNER_TEMP/overlap-cleanups-original.java"
+javac --release 25 -d "$RUNNER_TEMP/java25-overlap-classes" "$overlap_file"
+
+for option in remove_unused_imports remove_unused_local_variables remove_unnecessary_casts; do
+    option_profile="$RUNNER_TEMP/java25-$option.xml"
+    option_report="$RUNNER_TEMP/java25-$option-report.json"
+    cat > "$option_profile" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles version="2">
+  <profile kind="CleanUpProfile" name="java25-$option" version="2">
+    <setting id="cleanup.$option" value="true"/>
+  </profile>
+</profiles>
+XML
+    run_cleanup_with_profile "$option_profile" "$overlap_dir" \
+        --source-root "$overlap_dir/src" --report "$option_report"
+    cmp "$RUNNER_TEMP/overlap-cleanups-original.java" "$overlap_file"
+    python3 - "$option_report" "$option" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+option = "cleanup." + sys.argv[2]
+issues = report["issues"]
+assert issues, "Expected an Eclipse cleanup finding for " + option
+assert any(issue["cleanup"] == option for issue in issues), (option, issues)
+assert all(issue["file"] == "src/smoke/OverlapCleanups.java" for issue in issues), issues
+PY
+done
+echo "Real Eclipse option-level cleanup reports passed without modifying sources"

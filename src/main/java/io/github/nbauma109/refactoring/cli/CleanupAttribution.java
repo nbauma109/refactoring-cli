@@ -49,12 +49,31 @@ final class CleanupAttribution {
         }
         Map<String, String> uniqueSteps = new LinkedHashMap<>();
         for (Map.Entry<String, Set<String>> entry : candidates.entrySet()) {
-            if (entry.getValue().size() == 1) {
-                uniqueSteps.put(entry.getKey(), entry.getValue().iterator().next());
+            String unique = resolveOption(entry.getValue());
+            if (unique != null) {
+                uniqueSteps.put(entry.getKey(), unique);
             }
         }
-        String identifier = controllingOptions.size() == 1 ? controllingOptions.get(0) : module;
-        return new Selection(identifier, Map.copyOf(uniqueSteps));
+        String identifier = resolveOption(new LinkedHashSet<>(controllingOptions));
+        return new Selection(identifier == null ? module : identifier, Map.copyOf(uniqueSteps));
+    }
+
+    private static String resolveOption(Set<String> controllingOptions) {
+        Set<String> specificOptions = new LinkedHashSet<>(controllingOptions);
+        if (specificOptions.contains("cleanup.add_missing_annotations")) {
+            boolean hasSpecificOption = false;
+            for (String option : specificOptions) {
+                if (option.startsWith("cleanup.add_missing_")
+                        && !"cleanup.add_missing_annotations".equals(option)) {
+                    hasSpecificOption = true;
+                    break;
+                }
+            }
+            if (hasSpecificOption) {
+                specificOptions.remove("cleanup.add_missing_annotations");
+            }
+        }
+        return specificOptions.size() == 1 ? specificOptions.iterator().next() : null;
     }
 
     private static void collectRemovedSteps(String[] baseline, String[] remaining,

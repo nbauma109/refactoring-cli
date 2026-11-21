@@ -101,3 +101,42 @@ assert all(issue["file"] == "src/smoke/OverlapCleanups.java" for issue in issues
 PY
 done
 echo "Real Eclipse option-level cleanup reports passed without modifying sources"
+
+override_resource_dir="$RUNNER_TEMP/java25-override-resource"
+override_resource_file="$override_resource_dir/src/smoke/OverrideResourceCleanups.java"
+mkdir -p "$(dirname "$override_resource_file")"
+cp "$root/tests/java25/src/smoke/OverrideResourceCleanups.java" "$override_resource_file"
+cp "$override_resource_file" "$RUNNER_TEMP/override-resource-original.java"
+javac --release 25 -d "$RUNNER_TEMP/java25-override-resource-classes" "$override_resource_file"
+
+for option in add_missing_override_annotations try_with_resource; do
+    option_profile="$RUNNER_TEMP/java25-$option.xml"
+    option_report="$RUNNER_TEMP/java25-$option-report.json"
+    cat > "$option_profile" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles version="2">
+  <profile kind="CleanUpProfile" name="java25-$option" version="2">
+    <setting id="cleanup.$option" value="true"/>
+    <setting id="cleanup.add_missing_annotations" value="true"/>
+  </profile>
+</profiles>
+XML
+    run_cleanup_with_profile "$option_profile" "$override_resource_dir" \
+        --source-root "$override_resource_dir/src" --report "$option_report"
+    cmp "$RUNNER_TEMP/override-resource-original.java" "$override_resource_file"
+    python3 - "$option_report" "$option" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+option = "cleanup." + sys.argv[2]
+issues = report["issues"]
+print(option, json.dumps(issues, indent=2))
+assert issues, "Expected real Eclipse cleanup output for " + option
+assert any(issue["cleanup"] == option for issue in issues), (option, issues)
+assert len(issues) == 1, f"One cleanup opportunity must produce one warning: {option}, {issues}"
+assert all(issue["file"] == "src/smoke/OverrideResourceCleanups.java" for issue in issues), issues
+PY
+done
+echo "Eclipse Override and try-with-resources reporting passed without modifying source"

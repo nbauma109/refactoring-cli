@@ -8,6 +8,15 @@ import java.util.Map;
 public class BroadComplementaryCleanups {
 
     private int assignedOnlyOnce = 42;
+    private int configuredValue;
+
+    public BroadComplementaryCleanups(int configuredValue) {
+        this.configuredValue = configuredValue;
+    }
+
+    public int configuredValue() {
+        return configuredValue;
+    }
     private StringBuffer accumulator = new StringBuffer();
 
     public String obsoleteStringConstructor() {
@@ -15,7 +24,7 @@ public class BroadComplementaryCleanups {
     }
 
     public boolean blankString(String value) {
-        return value.trim().isEmpty();
+        return value.strip().isEmpty();
     }
 
     public String versionProperty() {
@@ -36,10 +45,18 @@ public class BroadComplementaryCleanups {
         return answer;
     }
 
+    public boolean pullUpAssignment(List<String> values) {
+        boolean removed;
+        if (removed = values.remove("candidate")) {
+            return removed;
+        }
+        return false;
+    }
+
     public int incrementExtraction() {
         int counter = 1;
-        int sum = counter++ + counter++;
-        return sum;
+        boolean positive = ++counter > 0;
+        return positive ? counter : -counter;
     }
 
     @SuppressWarnings("unused")

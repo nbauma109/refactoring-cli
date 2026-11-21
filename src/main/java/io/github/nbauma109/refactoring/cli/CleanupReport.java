@@ -7,7 +7,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import org.eclipse.core.resources.IFile;
@@ -135,9 +137,23 @@ public final class CleanupReport {
                 }
             }
         }
+        Map<Integer, List<EditDiagnostic>> modifierEdits = new LinkedHashMap<>();
         for (EditDiagnostic change : changes) {
-            if (!grouped.contains(change.edit())) {
-                diagnostics.add(change.diagnostic());
+            if (grouped.contains(change.edit())) {
+                continue;
+            }
+            Diagnostic issue = change.diagnostic();
+            if ("cleanup.remove_redundant_modifiers".equals(issue.cleanup())) {
+                modifierEdits.computeIfAbsent(issue.line(), ignored -> new ArrayList<>()).add(change);
+            } else {
+                diagnostics.add(issue);
+            }
+        }
+        for (List<EditDiagnostic> edits : modifierEdits.values()) {
+            if (edits.size() > 1) {
+                diagnostics.add(mergeEdits(edits));
+            } else {
+                diagnostics.add(edits.get(0).diagnostic());
             }
         }
     }
@@ -212,6 +228,12 @@ public final class CleanupReport {
         if (original.contains("Boolean.parseBoolean(") && original.contains("System.getProperty(")) {
             return "cleanup.system_property_boolean";
         }
+        if (original.contains("\"java.runtime.version\"")) {
+            return "cleanup.system_property_javaversion";
+        }
+        if (original.contains("\"java.specification.version\"")) {
+            return "cleanup.system_property_javaspecversion";
+        }
         if (original.contains("\"file.separator\"")) {
             return "cleanup.system_property_file_separator";
         }
@@ -235,6 +257,10 @@ public final class CleanupReport {
         String property = identifier.substring(prefix.length()).toUpperCase(Locale.ROOT);
         if ("BOOLEAN".equals(property)) {
             property = "BOOLEAN_PROPERTY";
+        } else if ("JAVAVERSION".equals(property)) {
+            property = "JAVA_RUNTIME_VERSION";
+        } else if ("JAVASPECVERSION".equals(property)) {
+            property = "JAVA_SPEC_VERSION";
         }
         for (String description : message.split("; ")) {
             if (description.endsWith("'" + property + "'")) {

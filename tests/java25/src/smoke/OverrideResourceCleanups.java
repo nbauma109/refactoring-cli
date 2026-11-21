@@ -15,7 +15,7 @@ final class OverrideResourceCleanups extends ParentResourceCleanups {
         }
     }
 
-    static final class Resource implements AutoCloseable {
+    static final class Resource implements java.io.Closeable {
 
         void work() {
             System.out.println("work");

@@ -41,17 +41,40 @@ candidates=(
     stringconcat_to_textblock
 )
 
+verified=(
+    pull_up_assignment
+    extract_increment
+    system_property_javaversion
+    system_property_javaspecversion
+    use_string_is_blank
+    remove_redundant_modifiers
+    array_with_curly
+    add_all
+    reduce_indentation
+)
+verify_exact="true"
+if [ "${ECLIPSE_PROBE_ALL:-false}" != "true" ]; then
+    candidates=("${verified[@]}")
+else
+    verify_exact="false"
+fi
+
 printf '[' > "$output"
 separator=''
 for option in "${candidates[@]}"; do
     profile="$RUNNER_TEMP/java25-broad-$option.xml"
     report="$RUNNER_TEMP/java25-broad-$option.json"
+    extra_setting=""
+    if [ "$option" = "system_property_javaspecversion" ]; then
+        extra_setting='    <setting id="cleanup.system_property_javaversion" value="true"/>'
+    fi
     cat > "$profile" <<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <profiles version="2">
   <profile kind="CleanUpProfile" name="broad-$option" version="2">
     <setting id="cleanup.$option" value="true"/>
     <setting id="cleanup.system_property" value="true"/>
+$extra_setting
   </profile>
 </profiles>
 XML
@@ -63,7 +86,7 @@ XML
         "$project" --source-root "$project/src" --report "$report" \
         > "$RUNNER_TEMP/java25-broad-$option.log" 2>&1
     cmp "$RUNNER_TEMP/java25-broad-complementary-original.java" "$source_file"
-    python3 - "$report" "$option" "$source_file" "$output" "$separator" <<'PY'
+    python3 - "$report" "$option" "$source_file" "$output" "$separator" "$verify_exact" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -78,6 +101,12 @@ for issue in issues:
     assert 0 <= issue["startOffset"] <= issue["endOffset"] <= len(source), issue
     assert issue["line"] > 0 and issue["column"] > 0, issue
 identified = sum(issue["cleanup"] == option for issue in issues)
+if sys.argv[6] == "true":
+    assert identified == 1, f"Expected exactly one {option} diagnostic: {issues}"
+    match = next(issue for issue in issues if issue["cleanup"] == option)
+    assert ";" not in match["message"], match
+    if option == "cleanup.remove_redundant_modifiers":
+        assert len(issues) == 1, issues
 summary = {
     "option": option,
     "total": len(issues),
@@ -92,4 +121,4 @@ PY
     separator=','
 done
 printf ']\n' >> "$output"
-echo "Candidate cleanup exploration completed without changing original source files."
+echo "Complementary cleanup verification completed without changing original source files."

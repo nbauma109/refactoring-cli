@@ -24,8 +24,27 @@ run_cleanup() {
         -nosplash -clean -consoleLog \
         -data "$workspace" \
         -application io.github.nbauma109.refactoring.cli.app \
-        --source 25 --profile "$profile" "$source_dir"
+        --source 25 --profile "$profile" "$source_dir" "$@"
 }
+
+original="$RUNNER_TEMP/java25-original-source.java"
+report="$RUNNER_TEMP/java25-cleanup-report.json"
+cp "$source_file" "$original"
+run_cleanup --report "$report"
+cmp "$original" "$source_file"
+python3 - "$report" <<'PY'
+import json
+import pathlib
+import sys
+
+data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert data["formatVersion"] == 1, data
+issues = data["issues"]
+assert issues, "Expected a reported Java 25 module imports cleanup"
+assert all(issue["file"] == "src/smoke/Java25ModuleImports.java" for issue in issues), issues
+assert all(issue["line"] > 0 and issue["column"] > 0 for issue in issues), issues
+assert all(issue["startOffset"] <= issue["endOffset"] for issue in issues), issues
+PY
 
 run_cleanup
 diff -u "$expected" "$source_file"

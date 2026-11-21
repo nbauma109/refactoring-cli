@@ -107,16 +107,16 @@ public final class CleanupReport {
                 .thenComparing(Diagnostic::cleanup)
                 .thenComparing(Diagnostic::message));
         Set<Diagnostic> seen = new HashSet<>();
+        boolean first = true;
         StringBuilder json = new StringBuilder("{\"formatVersion\":1,\"issues\":[");
         for (Diagnostic issue : ordered) {
             if (!seen.add(issue)) {
                 continue;
             }
-            if (json.charAt(json.length() - 1) == '}'
-                    && json.indexOf("\"issues\":[") < json.length() - 1
-                    && !json.toString().endsWith("[") ) {
+            if (!first) {
                 json.append(',');
             }
+            first = false;
             json.append("{\"file\":").append(quote(issue.file()))
                     .append(",\"line\":").append(issue.line())
                     .append(",\"column\":").append(issue.column())

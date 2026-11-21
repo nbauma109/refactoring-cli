@@ -30,7 +30,7 @@ run_cleanup() {
 original="$RUNNER_TEMP/java25-original-source.java"
 report="$RUNNER_TEMP/java25-cleanup-report.json"
 cp "$source_file" "$original"
-run_cleanup --report "$report"
+run_cleanup --source-root "$source_dir/src" --report "$report"
 cmp "$original" "$source_file"
 python3 - "$report" <<'PY'
 import json

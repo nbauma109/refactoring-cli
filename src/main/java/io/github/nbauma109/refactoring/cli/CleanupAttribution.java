@@ -73,6 +73,14 @@ final class CleanupAttribution {
                 specificOptions.remove("cleanup.add_missing_annotations");
             }
         }
+        if (specificOptions.contains("cleanup.system_property")) {
+            for (String option : specificOptions) {
+                if (option.startsWith("cleanup.system_property_")) {
+                    specificOptions.remove("cleanup.system_property");
+                    break;
+                }
+            }
+        }
         return specificOptions.size() == 1 ? specificOptions.iterator().next() : null;
     }
 

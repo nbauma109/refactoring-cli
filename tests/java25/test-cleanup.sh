@@ -117,6 +117,7 @@ for option in add_missing_override_annotations try_with_resource; do
 <profiles version="2">
   <profile kind="CleanUpProfile" name="java25-$option" version="2">
     <setting id="cleanup.$option" value="true"/>
+    <setting id="cleanup.add_missing_annotations" value="true"/>
   </profile>
 </profiles>
 XML

@@ -140,3 +140,43 @@ assert all(issue["file"] == "src/smoke/OverrideResourceCleanups.java" for issue 
 PY
 done
 echo "Eclipse Override and try-with-resources reporting passed without modifying source"
+
+complementary_dir="$RUNNER_TEMP/java25-complementary"
+complementary_file="$complementary_dir/src/smoke/ComplementarySystemProperties.java"
+mkdir -p "$(dirname "$complementary_file")"
+cp "$root/tests/java25/src/smoke/ComplementarySystemProperties.java" "$complementary_file"
+cp "$complementary_file" "$RUNNER_TEMP/complementary-original.java"
+javac --release 25 -d "$RUNNER_TEMP/java25-complementary-classes" "$complementary_file"
+
+for option in system_property_file_separator system_property_path_separator \
+        system_property_line_separator system_property_file_encoding system_property_boolean; do
+    option_profile="$RUNNER_TEMP/java25-$option.xml"
+    option_report="$RUNNER_TEMP/java25-$option-report.json"
+    cat > "$option_profile" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles version="2">
+  <profile kind="CleanUpProfile" name="complementary-$option" version="2">
+    <setting id="cleanup.system_property" value="true"/>
+    <setting id="cleanup.$option" value="true"/>
+  </profile>
+</profiles>
+XML
+    run_cleanup_with_profile "$option_profile" "$complementary_dir" \
+        --source-root "$complementary_dir/src" --report "$option_report"
+    cmp "$RUNNER_TEMP/complementary-original.java" "$complementary_file"
+    python3 - "$option_report" "$option" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+document = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+option = "cleanup." + sys.argv[2]
+issues = document["issues"]
+print(option, json.dumps(issues, indent=2))
+assert document["formatVersion"] == 1, document
+assert len(issues) == 1, f"Expected one complementary opportunity for {option}: {issues}"
+assert issues[0]["cleanup"] == option, (option, issues)
+assert issues[0]["file"] == "src/smoke/ComplementarySystemProperties.java", issues
+PY
+done
+echo "Five Eclipse-only system property cleanup options verified without source changes"

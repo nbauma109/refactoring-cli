@@ -7,9 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import org.eclipse.core.resources.IFile;
@@ -137,23 +135,9 @@ public final class CleanupReport {
                 }
             }
         }
-        Map<Integer, List<EditDiagnostic>> modifierEdits = new LinkedHashMap<>();
         for (EditDiagnostic change : changes) {
-            if (grouped.contains(change.edit())) {
-                continue;
-            }
-            Diagnostic issue = change.diagnostic();
-            if ("cleanup.remove_redundant_modifiers".equals(issue.cleanup())) {
-                modifierEdits.computeIfAbsent(issue.line(), ignored -> new ArrayList<>()).add(change);
-            } else {
-                diagnostics.add(issue);
-            }
-        }
-        for (List<EditDiagnostic> edits : modifierEdits.values()) {
-            if (edits.size() > 1) {
-                diagnostics.add(mergeEdits(edits));
-            } else {
-                diagnostics.add(edits.get(0).diagnostic());
+            if (!grouped.contains(change.edit())) {
+                diagnostics.add(change.diagnostic());
             }
         }
     }

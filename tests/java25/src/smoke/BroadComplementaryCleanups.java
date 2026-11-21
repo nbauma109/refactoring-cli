@@ -170,7 +170,7 @@ public class BroadComplementaryCleanups {
     }
 
     interface PublicInterface {
-        public abstract void execute();
+        public void execute();
     }
 
     public static Map<String, Integer> hashMap() {

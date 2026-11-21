@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.ltk.core.refactoring.Change;
@@ -61,6 +62,7 @@ public final class CleanupReport {
         List<EditDiagnostic> changes = new ArrayList<>();
         TextEditChangeGroup[] groups = change.getTextEditChangeGroups();
         collectLeaves(edit, groups, source, relative, attribution, module, message, changes);
+        discardSupplementaryWhitespaceEdits(changes, source, module);
         collectOpportunities(changes, groups, diagnostics);
     }
 
@@ -82,12 +84,37 @@ public final class CleanupReport {
             throw new IOException("Cleanup edit has an invalid source range in " + file);
         }
         int[] location = sourceLocation(source, offset);
+        String identifier = identifyOption(edit, groups, attribution, module, source);
         Diagnostic issue = new Diagnostic(file, location[0], location[1],
-                identifyOption(edit, groups, attribution), module, message, offset, offset + length);
+                identifier, module, optionDescription(identifier, message), offset, offset + length);
         diagnostics.add(new EditDiagnostic(edit, issue));
     }
 
 
+
+    private static void discardSupplementaryWhitespaceEdits(List<EditDiagnostic> changes,
+            String source, String module) {
+        if (!"ConstantsForSystemPropertyCleanUpCore".equals(module) || changes.size() < 2) {
+            return;
+        }
+        boolean hasSourceChange = false;
+        for (EditDiagnostic candidate : changes) {
+            if (!isSupplementaryWhitespaceEdit(candidate.edit(), source)) {
+                hasSourceChange = true;
+                break;
+            }
+        }
+        if (hasSourceChange) {
+            changes.removeIf(candidate -> isSupplementaryWhitespaceEdit(candidate.edit(), source));
+        }
+    }
+
+    private static boolean isSupplementaryWhitespaceEdit(TextEdit edit, String source) {
+        int start = edit.getOffset();
+        int end = start + edit.getLength();
+        return start >= 0 && end <= source.length()
+                && source.substring(start, end).isBlank();
+    }
 
     private static void collectOpportunities(List<EditDiagnostic> changes, TextEditChangeGroup[] groups,
             List<Diagnostic> diagnostics) {
@@ -150,7 +177,13 @@ public final class CleanupReport {
     }
 
     private static String identifyOption(TextEdit leaf, TextEditChangeGroup[] groups,
-            CleanupAttribution.Selection attribution) {
+            CleanupAttribution.Selection attribution, String module, String source) {
+        if ("ConstantsForSystemPropertyCleanUpCore".equals(module)) {
+            String identifier = systemPropertyIdentifier(leaf, source);
+            if (identifier != null) {
+                return identifier;
+            }
+        }
         if (groups == null || attribution.stepOptions().isEmpty()) {
             return attribution.identifier();
         }
@@ -169,6 +202,46 @@ public final class CleanupReport {
         return matches.size() == 1
                 ? matches.iterator().next()
                 : attribution.identifier();
+    }
+
+    private static String systemPropertyIdentifier(TextEdit edit, String source) {
+        if (edit.getLength() == 0) {
+            return null;
+        }
+        String original = source.substring(edit.getOffset(), edit.getOffset() + edit.getLength());
+        if (original.contains("Boolean.parseBoolean(") && original.contains("System.getProperty(")) {
+            return "cleanup.system_property_boolean";
+        }
+        if (original.contains("\"file.separator\"")) {
+            return "cleanup.system_property_file_separator";
+        }
+        if (original.contains("\"path.separator\"")) {
+            return "cleanup.system_property_path_separator";
+        }
+        if (original.contains("\"line.separator\"")) {
+            return "cleanup.system_property_line_separator";
+        }
+        if (original.contains("\"file.encoding\"")) {
+            return "cleanup.system_property_file_encoding";
+        }
+        return null;
+    }
+
+    private static String optionDescription(String identifier, String message) {
+        String prefix = "cleanup.system_property_";
+        if (!identifier.startsWith(prefix)) {
+            return message;
+        }
+        String property = identifier.substring(prefix.length()).toUpperCase(Locale.ROOT);
+        if ("BOOLEAN".equals(property)) {
+            property = "BOOLEAN_PROPERTY";
+        }
+        for (String description : message.split("; ")) {
+            if (description.endsWith("'" + property + "'")) {
+                return description;
+            }
+        }
+        return message;
     }
 
     private static boolean containsEdit(TextEdit parent, TextEdit leaf) {

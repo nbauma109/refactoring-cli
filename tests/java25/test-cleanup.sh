@@ -148,7 +148,7 @@ cp "$root/tests/java25/src/smoke/AdditionalOverlapCleanups.java" "$additional_fi
 cp "$additional_file" "$RUNNER_TEMP/additional-overlap-original.java"
 javac --release 25 -d "$RUNNER_TEMP/java25-additional-overlap-classes" "$additional_file"
 
-for option in number_suffix boolean_literal; do
+for option in number_suffix boolean_value_rather_than_comparison; do
     option_profile="$RUNNER_TEMP/java25-$option.xml"
     option_report="$RUNNER_TEMP/java25-$option-report.json"
     cat > "$option_profile" <<XML

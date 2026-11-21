@@ -212,6 +212,12 @@ public final class CleanupReport {
         if (original.contains("Boolean.parseBoolean(") && original.contains("System.getProperty(")) {
             return "cleanup.system_property_boolean";
         }
+        if (original.contains("\"java.runtime.version\"")) {
+            return "cleanup.system_property_javaversion";
+        }
+        if (original.contains("\"java.specification.version\"")) {
+            return "cleanup.system_property_javaspecversion";
+        }
         if (original.contains("\"file.separator\"")) {
             return "cleanup.system_property_file_separator";
         }
@@ -235,6 +241,10 @@ public final class CleanupReport {
         String property = identifier.substring(prefix.length()).toUpperCase(Locale.ROOT);
         if ("BOOLEAN".equals(property)) {
             property = "BOOLEAN_PROPERTY";
+        } else if ("JAVAVERSION".equals(property)) {
+            property = "JAVA_RUNTIME_VERSION";
+        } else if ("JAVASPECVERSION".equals(property)) {
+            property = "JAVA_SPEC_VERSION";
         }
         for (String description : message.split("; ")) {
             if (description.endsWith("'" + property + "'")) {

@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.jar.Manifest;
 
@@ -91,6 +92,10 @@ public class CleanupRunner {
     }
 
     public List<Path> run() throws Exception {
+        return run(Optional.empty());
+    }
+
+    public List<Path> run(Optional<Path> reportPath) throws Exception {
 
         LoggingMonitor monitor = new LoggingMonitor();
 
@@ -151,12 +156,18 @@ public class CleanupRunner {
 
         if (units.isEmpty()) {
             System.out.println("Nothing to clean.");
+            if (reportPath.isPresent()) {
+                CleanupReport.write(reportPath.get(), List.of());
+            }
             return new ArrayList<>();
         }
 
         System.out.println("Loading cleanup settings...");
         Map<String, String> cleanupSettings = loadCleanupSettingsFromProfile(profileFile);
         cleanupSettings.put("cleanup.organize_imports", "false");
+        if (reportPath.isPresent() && isOptionEnabled(cleanupSettings, "cleanup.instanceof")) {
+            throw new IllegalArgumentException("Report-only mode does not support the custom instanceof fallback.");
+        }
 
         System.out.println("Loading available cleanups...");
         CleanUpRegistry registry = JavaPlugin.getDefault().getCleanUpRegistry();
@@ -176,6 +187,7 @@ public class CleanupRunner {
         System.out.println("Enabled " + enabledCleanUps.size() + " cleanup modules from profile.");
 
         List<Path> changed = new ArrayList<>();
+        List<CleanupReport.Diagnostic> diagnostics = new ArrayList<>();
 
         for (ICleanUp cleanUp : enabledCleanUps) {
 
@@ -222,6 +234,12 @@ public class CleanupRunner {
                     continue;
                 }
 
+                if (reportPath.isPresent()) {
+                    CleanupReport.collect(change, projectRoot, cleanUp.getClass().getSimpleName(),
+                            String.join("; ", cleanUp.getStepDescriptions()), diagnostics);
+                    continue;
+                }
+
                 System.out.println("Collecting changed files...");
                 List<Path> changedFiles = collectChangedFiles(change);
 
@@ -244,6 +262,11 @@ public class CleanupRunner {
                     );
                 }
             }
+        }
+
+        if (reportPath.isPresent()) {
+            CleanupReport.write(reportPath.get(), diagnostics);
+            return List.of();
         }
 
         if (isOptionEnabled(cleanupSettings, "cleanup.instanceof")) {

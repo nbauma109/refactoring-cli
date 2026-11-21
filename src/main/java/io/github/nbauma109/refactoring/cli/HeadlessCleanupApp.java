@@ -12,13 +12,14 @@ public class HeadlessCleanupApp implements IApplication {
 
         if (args == null || args.length == 0) {
             System.err.println("Missing arguments. Usage:");
-            System.err.println("  --source <level> --profile <file> <projectRoot> [--classpath <entries>]");
+            System.err.println("  --source <level> --profile <file> <projectRoot> [--classpath <entries>] [--report <file>]");
             return Integer.valueOf(1);
         }
 
         String sourceLevel = null;
         String profilePath = null;
         String projectRootPath = null;
+        Path reportPath = null;
         List<String> extraClasspath = new ArrayList<>();
 
         int i = 0;
@@ -28,6 +29,8 @@ public class HeadlessCleanupApp implements IApplication {
                 sourceLevel = args[++i];
             } else if ("--profile".equals(arg) && i + 1 < args.length) {
                 profilePath = args[++i];
+            } else if ("--report".equals(arg) && i + 1 < args.length) {
+                reportPath = Paths.get(args[++i]);
             } else if ("--classpath".equals(arg) && i + 1 < args.length) {
                 String[] cpEntries = args[++i].split(System.getProperty("path.separator"));
                 for (String entry : cpEntries) {
@@ -50,7 +53,7 @@ public class HeadlessCleanupApp implements IApplication {
         CleanupRunner runner =
                 new CleanupRunner(projectRoot, profileFile, sourceLevel, extraClasspath);
 
-        runner.run();
+        runner.run(Optional.ofNullable(reportPath));
 
         return Integer.valueOf(0);
     }

@@ -176,6 +176,7 @@ print(option, json.dumps(issues, indent=2))
 assert document["formatVersion"] == 1, document
 assert len(issues) == 1, f"Expected one complementary opportunity for {option}: {issues}"
 assert issues[0]["cleanup"] == option, (option, issues)
+assert ";" not in issues[0]["message"], issues
 assert issues[0]["file"] == "src/smoke/ComplementarySystemProperties.java", issues
 PY
 done

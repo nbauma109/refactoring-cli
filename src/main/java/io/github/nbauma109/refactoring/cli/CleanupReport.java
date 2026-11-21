@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.ltk.core.refactoring.Change;
@@ -83,8 +84,9 @@ public final class CleanupReport {
             throw new IOException("Cleanup edit has an invalid source range in " + file);
         }
         int[] location = sourceLocation(source, offset);
+        String identifier = identifyOption(edit, groups, attribution, module, source);
         Diagnostic issue = new Diagnostic(file, location[0], location[1],
-                identifyOption(edit, groups, attribution, module, source), module, message, offset, offset + length);
+                identifier, module, optionDescription(identifier, message), offset, offset + length);
         diagnostics.add(new EditDiagnostic(edit, issue));
     }
 
@@ -223,6 +225,23 @@ public final class CleanupReport {
             return "cleanup.system_property_file_encoding";
         }
         return null;
+    }
+
+    private static String optionDescription(String identifier, String message) {
+        String prefix = "cleanup.system_property_";
+        if (!identifier.startsWith(prefix)) {
+            return message;
+        }
+        String property = identifier.substring(prefix.length()).toUpperCase(Locale.ROOT);
+        if ("BOOLEAN".equals(property)) {
+            property = "BOOLEAN_PROPERTY";
+        }
+        for (String description : message.split("; ")) {
+            if (description.endsWith("'" + property + "'")) {
+                return description;
+            }
+        }
+        return message;
     }
 
     private static boolean containsEdit(TextEdit parent, TextEdit leaf) {

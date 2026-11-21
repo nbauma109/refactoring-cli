@@ -12,7 +12,7 @@ public class HeadlessCleanupApp implements IApplication {
 
         if (args == null || args.length == 0) {
             System.err.println("Missing arguments. Usage:");
-            System.err.println("  --source <level> --profile <file> <projectRoot> [--classpath <entries>] [--report <file>]");
+            System.err.println("  --source <level> --profile <file> <projectRoot> [--classpath <entries>] [--source-root <directory>] [--report <file>]");
             return Integer.valueOf(1);
         }
 
@@ -21,6 +21,7 @@ public class HeadlessCleanupApp implements IApplication {
         String projectRootPath = null;
         Path reportPath = null;
         List<String> extraClasspath = new ArrayList<>();
+        List<Path> sourceRoots = new ArrayList<>();
 
         int i = 0;
         while (i < args.length) {
@@ -29,6 +30,8 @@ public class HeadlessCleanupApp implements IApplication {
                 sourceLevel = args[++i];
             } else if ("--profile".equals(arg) && i + 1 < args.length) {
                 profilePath = args[++i];
+            } else if ("--source-root".equals(arg) && i + 1 < args.length) {
+                sourceRoots.add(Paths.get(args[++i]));
             } else if ("--report".equals(arg) && i + 1 < args.length) {
                 reportPath = Paths.get(args[++i]);
             } else if ("--classpath".equals(arg) && i + 1 < args.length) {
@@ -51,7 +54,7 @@ public class HeadlessCleanupApp implements IApplication {
         Path profileFile = Paths.get(profilePath);
 
         CleanupRunner runner =
-                new CleanupRunner(projectRoot, profileFile, sourceLevel, extraClasspath);
+                new CleanupRunner(projectRoot, profileFile, sourceLevel, extraClasspath, sourceRoots);
 
         runner.run(Optional.ofNullable(reportPath));
 

@@ -83,12 +83,22 @@ public class CleanupRunner {
     private final Path profileFile;
     private final String sourceLevel;
     private final List<String> extraClasspath;
+    private final List<Path> sourceRoots;
 
     public CleanupRunner(Path projectRoot, Path profileFile, String sourceLevel, List<String> extraClasspath) {
         this.projectRoot = projectRoot;
         this.profileFile = profileFile;
         this.sourceLevel = sourceLevel;
-        this.extraClasspath = extraClasspath;
+        this(projectRoot, profileFile, sourceLevel, extraClasspath, List.of());
+    }
+
+    public CleanupRunner(Path projectRoot, Path profileFile, String sourceLevel, List<String> extraClasspath,
+            List<Path> sourceRoots) {
+        this.projectRoot = projectRoot;
+        this.profileFile = profileFile;
+        this.sourceLevel = sourceLevel;
+        this.extraClasspath = List.copyOf(extraClasspath);
+        this.sourceRoots = List.copyOf(sourceRoots);
     }
 
     public List<Path> run() throws Exception {
@@ -308,6 +318,17 @@ public class CleanupRunner {
 
     private Set<Path> detectSourceFolders(Path root) throws IOException {
         Set<Path> sourceFolders = new LinkedHashSet<>();
+        if (!sourceRoots.isEmpty()) {
+            Path project = root.toAbsolutePath().normalize();
+            for (Path sourceRoot : sourceRoots) {
+                Path directory = sourceRoot.toAbsolutePath().normalize();
+                if (!directory.startsWith(project) || !Files.isDirectory(directory)) {
+                    throw new IOException("Invalid source root: " + directory);
+                }
+                sourceFolders.add(directory);
+            }
+            return sourceFolders;
+        }
 
         Files.walkFileTree(root, new FileVisitor<Path>() {
             @Override

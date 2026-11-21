@@ -183,7 +183,7 @@ public class CleanupRunner {
 
         MapCleanUpOptions options = new MapCleanUpOptions(cleanupSettings);
         List<ICleanUp> enabledCleanUps = new ArrayList<>();
-        Map<ICleanUp, String> cleanupIdentifiers = new LinkedHashMap<>();
+        Map<ICleanUp, CleanupAttribution.Selection> cleanupIdentifiers = new LinkedHashMap<>();
 
         for (ICleanUp cleanUp : cleanUps) {
             cleanUp.setOptions(options);
@@ -191,8 +191,8 @@ public class CleanupRunner {
             if (steps != null && steps.length > 0) {
                 enabledCleanUps.add(cleanUp);
                 if (reportPath.isPresent()) {
-                    String cleanupId = CleanupAttribution.identify(cleanUp, cleanupSettings)
-                            .orElse(cleanUp.getClass().getSimpleName());
+                    CleanupAttribution.Selection cleanupId =
+                            CleanupAttribution.identify(cleanUp, cleanupSettings);
                     cleanupIdentifiers.put(cleanUp, cleanupId);
                     cleanUp.setOptions(options);
                 }

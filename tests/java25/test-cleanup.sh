@@ -140,3 +140,39 @@ assert all(issue["file"] == "src/smoke/OverrideResourceCleanups.java" for issue 
 PY
 done
 echo "Eclipse Override and try-with-resources reporting passed without modifying source"
+
+additional_dir="$RUNNER_TEMP/java25-additional-overlap"
+additional_file="$additional_dir/src/smoke/AdditionalOverlapCleanups.java"
+mkdir -p "$(dirname "$additional_file")"
+cp "$root/tests/java25/src/smoke/AdditionalOverlapCleanups.java" "$additional_file"
+cp "$additional_file" "$RUNNER_TEMP/additional-overlap-original.java"
+javac --release 25 -d "$RUNNER_TEMP/java25-additional-overlap-classes" "$additional_file"
+
+for option in number_suffix boolean_value_rather_than_comparison; do
+    option_profile="$RUNNER_TEMP/java25-$option.xml"
+    option_report="$RUNNER_TEMP/java25-$option-report.json"
+    cat > "$option_profile" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles version="2">
+  <profile kind="CleanUpProfile" name="java25-$option" version="2">
+    <setting id="cleanup.$option" value="true"/>
+  </profile>
+</profiles>
+XML
+    run_cleanup_with_profile "$option_profile" "$additional_dir" \
+        --source-root "$additional_dir/src" --report "$option_report"
+    cmp "$RUNNER_TEMP/additional-overlap-original.java" "$additional_file"
+    python3 - "$option_report" "$option" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+issues = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["issues"]
+option = "cleanup." + sys.argv[2]
+print(option, json.dumps(issues, indent=2))
+assert len(issues) == 1, f"Expected one cleanup finding for {option}: {issues}"
+assert issues[0]["cleanup"] == option, issues
+assert issues[0]["file"] == "src/smoke/AdditionalOverlapCleanups.java", issues
+PY
+done
+echo "Additional Eclipse cleanup overlap options verified without source changes"

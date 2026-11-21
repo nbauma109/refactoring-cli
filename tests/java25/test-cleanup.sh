@@ -41,6 +41,8 @@ data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert data["formatVersion"] == 1, data
 issues = data["issues"]
 assert issues, "Expected a reported Java 25 module imports cleanup"
+assert all(issue["cleanup"] == "cleanup.module_imports" for issue in issues), issues
+assert all(issue["module"] for issue in issues), issues
 assert all(issue["file"] == "src/smoke/Java25ModuleImports.java" for issue in issues), issues
 assert all(issue["line"] > 0 and issue["column"] > 0 for issue in issues), issues
 assert all(issue["startOffset"] <= issue["endOffset"] for issue in issues), issues

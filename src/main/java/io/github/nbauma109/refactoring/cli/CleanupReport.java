@@ -24,23 +24,23 @@ public final class CleanupReport {
     private CleanupReport() {
     }
 
-    public record Diagnostic(String file, int line, int column, String cleanup,
+    public record Diagnostic(String file, int line, int column, String cleanup, String module,
             String message, int startOffset, int endOffset) {
     }
 
-    public static void collect(Change change, Path root, String cleanup, String message,
-            List<Diagnostic> diagnostics) throws IOException {
+    public static void collect(Change change, Path root, String cleanup, String module,
+            String message, List<Diagnostic> diagnostics) throws IOException {
         if (change instanceof CompositeChange composite) {
             for (Change child : composite.getChildren()) {
-                collect(child, root, cleanup, message, diagnostics);
+                collect(child, root, cleanup, module, message, diagnostics);
             }
         } else if (change instanceof TextFileChange textChange) {
-            collectTextEdits(textChange, root, cleanup, message, diagnostics);
+            collectTextEdits(textChange, root, cleanup, module, message, diagnostics);
         }
     }
 
     private static void collectTextEdits(TextFileChange change, Path root, String cleanup,
-            String message, List<Diagnostic> diagnostics) throws IOException {
+            String module, String message, List<Diagnostic> diagnostics) throws IOException {
         IFile resource = change.getFile();
         TextEdit edit = change.getEdit();
         if (resource == null || resource.getLocation() == null || edit == null) {
@@ -53,14 +53,14 @@ public final class CleanupReport {
         }
         String source = Files.readString(path, StandardCharsets.UTF_8);
         String relative = project.relativize(path).toString().replace('\\', '/');
-        collectLeaves(edit, source, relative, cleanup, message, diagnostics);
+        collectLeaves(edit, source, relative, cleanup, module, message, diagnostics);
     }
 
     private static void collectLeaves(TextEdit edit, String source, String file, String cleanup,
-            String message, List<Diagnostic> diagnostics) throws IOException {
+            String module, String message, List<Diagnostic> diagnostics) throws IOException {
         if (edit.hasChildren()) {
             for (TextEdit child : edit.getChildren()) {
-                collectLeaves(child, source, file, cleanup, message, diagnostics);
+                collectLeaves(child, source, file, cleanup, module, message, diagnostics);
             }
             return;
         }
@@ -73,7 +73,7 @@ public final class CleanupReport {
             throw new IOException("Cleanup edit has an invalid source range in " + file);
         }
         int[] location = sourceLocation(source, offset);
-        diagnostics.add(new Diagnostic(file, location[0], location[1], cleanup,
+        diagnostics.add(new Diagnostic(file, location[0], location[1], cleanup, module,
                 message, offset, offset + length));
     }
 
@@ -105,6 +105,7 @@ public final class CleanupReport {
                 .thenComparingInt(Diagnostic::startOffset)
                 .thenComparingInt(Diagnostic::endOffset)
                 .thenComparing(Diagnostic::cleanup)
+                .thenComparing(Diagnostic::module)
                 .thenComparing(Diagnostic::message));
         Set<Diagnostic> seen = new HashSet<>();
         boolean first = true;
@@ -121,6 +122,7 @@ public final class CleanupReport {
                     .append(",\"line\":").append(issue.line())
                     .append(",\"column\":").append(issue.column())
                     .append(",\"cleanup\":").append(quote(issue.cleanup()))
+                    .append(",\"module\":").append(quote(issue.module()))
                     .append(",\"message\":").append(quote(issue.message()))
                     .append(",\"startOffset\":").append(issue.startOffset())
                     .append(",\"endOffset\":").append(issue.endOffset()).append('}');

@@ -22,7 +22,7 @@ eclipsec -nosplash -clean -data /tmp/eclipse-cleanup-workspace \
   /path/to/project
 ```
 
-The output is UTF-8 JSON with `formatVersion: 1` and an `issues` array. Each issue contains `file` (project-relative source path), `line`, `column`, `cleanup` (Eclipse cleanup class), `message` (enabled cleanup step descriptions), `startOffset` and `endOffset` (zero-based UTF-16 offsets in the original file). Existing cleanup execution without `--report` retains its original modifying behaviour.
+The output is UTF-8 JSON with `formatVersion: 1` and an `issues` array. Each issue contains `file` (project-relative source path), `line`, `column`, `cleanup` (exact cleanup option when uniquely identifiable; otherwise the module name), `module` (Eclipse cleanup implementation class), `message` (enabled cleanup step descriptions), `startOffset` and `endOffset` (zero-based UTF-16 offsets in the original file). Existing cleanup execution without `--report` retains its original modifying behaviour.
 
 For safety, the report-only mode **rejects** the custom `cleanup.instanceof` fallback if it is enabled: that fallback still applies source edits outside the standard Eclipse refactoring `Change` pipeline. Disable that option in the reporting profile until a non-mutating preview is available. Report-only mode also refuses invalid source roots and edits outside the project. Reported cleanup class names are not yet exact individual cleanup option identifiers when a module controls multiple transformations.
 

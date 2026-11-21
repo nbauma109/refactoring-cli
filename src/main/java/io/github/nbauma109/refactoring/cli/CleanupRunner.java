@@ -183,12 +183,19 @@ public class CleanupRunner {
 
         MapCleanUpOptions options = new MapCleanUpOptions(cleanupSettings);
         List<ICleanUp> enabledCleanUps = new ArrayList<>();
+        Map<ICleanUp, String> cleanupIdentifiers = new LinkedHashMap<>();
 
         for (ICleanUp cleanUp : cleanUps) {
             cleanUp.setOptions(options);
             String[] steps = cleanUp.getStepDescriptions();
             if (steps != null && steps.length > 0) {
                 enabledCleanUps.add(cleanUp);
+                if (reportPath.isPresent()) {
+                    String cleanupId = CleanupAttribution.identify(cleanUp, cleanupSettings)
+                            .orElse(cleanUp.getClass().getSimpleName());
+                    cleanupIdentifiers.put(cleanUp, cleanupId);
+                    cleanUp.setOptions(options);
+                }
             }
         }
         System.out.println("Enabled " + enabledCleanUps.size() + " cleanup modules from profile.");
@@ -242,7 +249,8 @@ public class CleanupRunner {
                 }
 
                 if (reportPath.isPresent()) {
-                    CleanupReport.collect(change, projectRoot, cleanUp.getClass().getSimpleName(),
+                    CleanupReport.collect(change, projectRoot, cleanupIdentifiers.get(cleanUp),
+                            cleanUp.getClass().getSimpleName(),
                             String.join("; ", cleanUp.getStepDescriptions()), diagnostics);
                     continue;
                 }

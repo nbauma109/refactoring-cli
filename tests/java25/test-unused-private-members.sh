@@ -37,6 +37,7 @@ XML
     python3 - "$report" "$option" "$source_file" <<'PY'
 import json
 from pathlib import Path
+import re
 import sys
 
 document = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
@@ -51,7 +52,7 @@ assert 0 <= issues[0]["startOffset"] < issues[0]["endOffset"] <= len(source), is
 expected = "unusedCounter" if key.endswith("_fields") else "unusedDescription"
 changed = source[issues[0]["startOffset"]:issues[0]["endOffset"]]
 assert expected in changed, (key, changed, issues)
-assert "activeCounter" not in changed and "usedDescription" not in changed, issues
+assert not re.search(r"\b(activeCounter|usedDescription)\b", changed), issues
 print("PRIVATE_MEMBER_CANDIDATE", key, json.dumps(issues, indent=2))
 PY
     test "$(sha256sum "$source_file")" = "$original_hash"

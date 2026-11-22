@@ -51,6 +51,11 @@ jobs:
           ECLIPSE_HOME: ${{ runner.temp }}/eclipse
         run: bash tests/java25/test-cleanup.sh
 
+      - name: Screen three potential high-signal complementary cleanups
+        env:
+          ECLIPSE_HOME: ${{ runner.temp }}/eclipse
+        run: bash tests/java25/test-high-signal-candidates.sh
+
       - name: Probe diverse complementary Eclipse cleanup options
         env:
           ECLIPSE_HOME: ${{ runner.temp }}/eclipse

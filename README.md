@@ -48,3 +48,14 @@ The broader [candidate test](tests/java25/test-complementary-candidates.sh) can 
 compatible Eclipse runtime and `RUNNER_TEMP` set. CI runs only the verified option
 set by default. The resulting JSON summary lists exact identifiers and source lines,
 allowing us to evaluate future cleanup batches without enabling unverified rules.
+
+## Next high-signal Eclipse cleanup candidates
+
+The Java 25 integration workflow separately screens three potential complementary
+refactorings: precompilation of a reused regular expression, conversion of an inner
+class that does not use its enclosing instance to a static nested class, and
+removal of a stale `@SuppressWarnings` annotation. These remain **experimental**;
+none is automatically included in a recommended profile. Their independent reports
+show the exact Eclipse cleanup identifier, source line and number of findings.
+The screening checks source integrity and compilation but does not assume every
+candidate is distinct from SonarJava until combined-engine comparisons pass.

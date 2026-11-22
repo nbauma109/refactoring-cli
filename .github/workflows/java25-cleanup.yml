@@ -55,3 +55,8 @@ jobs:
         env:
           ECLIPSE_HOME: ${{ runner.temp }}/eclipse
         run: bash tests/java25/test-complementary-candidates.sh
+
+      - name: Verify real Eclipse cleanup for unused private members
+        env:
+          ECLIPSE_HOME: ${{ runner.temp }}/eclipse
+        run: bash tests/java25/test-unused-private-members.sh

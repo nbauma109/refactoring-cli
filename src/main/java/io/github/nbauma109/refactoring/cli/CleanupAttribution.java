@@ -81,6 +81,15 @@ final class CleanupAttribution {
                 }
             }
         }
+        if (specificOptions.contains("cleanup.remove_unused_private_members")) {
+            for (String option : specificOptions) {
+                if (option.startsWith("cleanup.remove_unused_private_")
+                        && !"cleanup.remove_unused_private_members".equals(option)) {
+                    specificOptions.remove("cleanup.remove_unused_private_members");
+                    break;
+                }
+            }
+        }
         return specificOptions.size() == 1 ? specificOptions.iterator().next() : null;
     }
 
